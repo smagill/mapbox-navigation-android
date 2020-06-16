@@ -22,7 +22,6 @@ import com.mapbox.mapboxsdk.style.layers.PropertyFactory.lineGradient
 import com.mapbox.mapboxsdk.style.layers.SymbolLayer
 import com.mapbox.mapboxsdk.style.sources.GeoJsonOptions
 import com.mapbox.mapboxsdk.style.sources.GeoJsonSource
-import com.mapbox.navigation.ui.internal.route.MapRouteLayerProvider
 import com.mapbox.navigation.ui.internal.route.MapRouteSourceProvider
 import com.mapbox.navigation.ui.internal.route.RouteConstants
 import com.mapbox.navigation.ui.internal.route.RouteConstants.ALTERNATIVE_ROUTE_LAYER_ID
@@ -38,6 +37,7 @@ import com.mapbox.navigation.ui.internal.route.RouteConstants.UNKNOWN_CONGESTION
 import com.mapbox.navigation.ui.internal.route.RouteConstants.WAYPOINT_DESTINATION_VALUE
 import com.mapbox.navigation.ui.internal.route.RouteConstants.WAYPOINT_ORIGIN_VALUE
 import com.mapbox.navigation.ui.internal.route.RouteConstants.WAYPOINT_PROPERTY_KEY
+import com.mapbox.navigation.ui.internal.route.RouteLayerProvider
 import com.mapbox.navigation.ui.internal.utils.MapUtils
 import com.mapbox.navigation.ui.route.MapRouteLine.MapRouteLineSupport.buildWayPointFeatureCollection
 import com.mapbox.navigation.ui.route.MapRouteLine.MapRouteLineSupport.calculateRouteLineSegments
@@ -47,7 +47,9 @@ import com.mapbox.navigation.ui.route.MapRouteLine.MapRouteLineSupport.getBoolea
 import com.mapbox.navigation.ui.route.MapRouteLine.MapRouteLineSupport.getFloatStyledValue
 import com.mapbox.navigation.ui.route.MapRouteLine.MapRouteLineSupport.getResourceStyledValue
 import com.mapbox.navigation.ui.route.MapRouteLine.MapRouteLineSupport.getStyledColor
+import com.mapbox.navigation.ui.route.MapRouteLine.MapRouteLineSupport.swapProperties
 import com.mapbox.navigation.utils.internal.ThreadController
+import com.mapbox.navigation.utils.internal.ifNonNull
 import com.mapbox.navigation.utils.internal.parallelMap
 import com.mapbox.turf.TurfMeasurement
 import java.math.BigDecimal
@@ -74,7 +76,7 @@ internal class MapRouteLine(
     private val style: Style,
     @androidx.annotation.StyleRes styleRes: Int,
     belowLayerId: String?,
-    layerProvider: MapRouteLayerProvider,
+    layerProvider: RouteLayerProvider,
     routeFeatureDatas: List<RouteFeatureData>,
     routeExpressionData: List<RouteLineExpressionData>,
     allRoutesVisible: Boolean,
@@ -97,7 +99,7 @@ internal class MapRouteLine(
         style: Style,
         @androidx.annotation.StyleRes styleRes: Int,
         belowLayerId: String?,
-        layerProvider: MapRouteLayerProvider,
+        layerProvider: RouteLayerProvider,
         mapRouteSourceProvider: MapRouteSourceProvider,
         routeLineInitializedCallback: MapRouteLineInitializedCallback?
     ) : this(
@@ -420,22 +422,42 @@ internal class MapRouteLine(
      * @param directionsRoutes the routes to be represented on the map.
      */
     fun draw(directionsRoutes: List<DirectionsRoute>) {
-        reinitializeWithRoutes(directionsRoutes)
+        val featureDataProvider: () -> List<RouteFeatureData> =
+            getRouteFeatureDataProvider(directionsRoutes)
+        reinitializeWithRoutes(directionsRoutes, featureDataProvider)
+        drawRoutes(routeFeatureData)
+    }
+
+    fun drawIdentifiableRoute(directionsRoutes: IdentifiableRoute) {
+        drawIdentifiableRoutes(listOf(directionsRoutes))
+    }
+
+    fun drawIdentifiableRoutes(directionsRoutes: List<IdentifiableRoute>) {
+        val routes = directionsRoutes.map { it.route }
+        val featureDataProvider: () -> List<RouteFeatureData> =
+            getIdentifiableRouteFeatureDataProvider(directionsRoutes)
+        reinitializeWithRoutes(routes, featureDataProvider)
         drawRoutes(routeFeatureData)
     }
 
     internal fun reinitializeWithRoutes(directionsRoutes: List<DirectionsRoute>) {
+        val featureDataProvider: () -> List<RouteFeatureData> =
+            getRouteFeatureDataProvider(directionsRoutes)
+        reinitializeWithRoutes(directionsRoutes, featureDataProvider)
+    }
+
+    private fun reinitializeWithRoutes(directionsRoutes: List<DirectionsRoute>, getRouteFeatureData: () -> List<RouteFeatureData>) {
         if (directionsRoutes.isNotEmpty()) {
             clearRouteData()
             this.directionsRoutes.addAll(directionsRoutes)
             primaryRoute = this.directionsRoutes.first()
             alternativesVisible = directionsRoutes.size > 1
             allLayersAreVisible = true
-            val newRouteFeatureData = directionsRoutes.parallelMap(
-                ::generateFeatureCollection,
-                ThreadController.getMainScopeAndRootJob().scope
-            )
-            routeFeatureData.addAll(newRouteFeatureData)
+
+            val newRouteFeatureData = getRouteFeatureData().also {
+                routeFeatureData.addAll(it)
+            }
+
             if (newRouteFeatureData.isNotEmpty()) {
                 updateRouteTrafficSegments(newRouteFeatureData.first())
             }
@@ -460,6 +482,9 @@ internal class MapRouteLine(
      */
     fun updatePrimaryRouteIndex(route: DirectionsRoute): Boolean {
         return if (route != this.primaryRoute) {
+            val primaryRouteFeatures = routeFeatureData.firstOrNull { it.route == primaryRoute }?.featureCollection?.features()?.firstOrNull()
+            val newPrimaryRouteFeatures = routeFeatureData.firstOrNull { it.route == route }?.featureCollection?.features()?.firstOrNull()
+            ifNonNull(primaryRouteFeatures, newPrimaryRouteFeatures, ::swapProperties)
             this.primaryRoute = route
             drawRoutes(routeFeatureData)
             true
@@ -558,6 +583,20 @@ internal class MapRouteLine(
         }?.lineString ?: LineString.fromPolyline(route.geometry()!!, Constants.PRECISION_6)
     }
 
+    private fun getIdentifiableRouteFeatureDataProvider(directionsRoutes: List<IdentifiableRoute>): () -> List<RouteFeatureData> = {
+        directionsRoutes.parallelMap(
+            ::generateFeatureCollection,
+            ThreadController.getMainScopeAndRootJob().scope
+        )
+    }
+
+    private fun getRouteFeatureDataProvider(directionsRoutes: List<DirectionsRoute>): () -> List<RouteFeatureData> = {
+        directionsRoutes.parallelMap(
+            ::generateFeatureCollection,
+            ThreadController.getMainScopeAndRootJob().scope
+        )
+    }
+
     /**
      * Initializes the layers used for drawing routes.
      *
@@ -570,7 +609,7 @@ internal class MapRouteLine(
      */
     private fun initializeLayers(
         style: Style,
-        layerProvider: MapRouteLayerProvider,
+        layerProvider: RouteLayerProvider,
         originIcon: Drawable,
         destinationIcon: Drawable,
         belowLayerId: String
@@ -992,12 +1031,31 @@ internal class MapRouteLine(
          * @return a RouteFeatureData containing the original route and a FeatureCollection and
          * LineString
          */
-        fun generateFeatureCollection(route: DirectionsRoute): RouteFeatureData {
+        fun generateFeatureCollection(route: DirectionsRoute): RouteFeatureData =
+            generateFeatureCollection(route, null)
+
+        /**
+         * Generates a FeatureCollection and LineString based on the @param route.
+         * @param route the DirectionsRoute to used to derive the result
+         *
+         * @return a RouteFeatureData containing the original route and a FeatureCollection and
+         * LineString
+         */
+        fun generateFeatureCollection(routeData: IdentifiableRoute): RouteFeatureData =
+            generateFeatureCollection(routeData.route, routeData.routeIdentifier)
+
+        private fun generateFeatureCollection(route: DirectionsRoute, identifier: String?): RouteFeatureData {
             val routeGeometry = LineString.fromPolyline(
                 route.geometry() ?: "",
                 Constants.PRECISION_6
             )
-            val routeFeature = Feature.fromGeometry(routeGeometry)
+
+            val routeFeature = when (identifier) {
+                null -> Feature.fromGeometry(routeGeometry)
+                else -> Feature.fromGeometry(routeGeometry).also {
+                    it.addBooleanProperty(identifier, true)
+                }
+            }
 
             return RouteFeatureData(
                 route,
@@ -1158,6 +1216,23 @@ internal class MapRouteLine(
                 val propValue =
                     if (index == 0) WAYPOINT_ORIGIN_VALUE else WAYPOINT_DESTINATION_VALUE
                 it.addStringProperty(WAYPOINT_PROPERTY_KEY, propValue)
+            }
+        }
+
+        fun swapProperties(featureA: Feature, featureB: Feature) {
+            val featureAProperties = featureA.properties()
+            val featureAKeySetToRemove = featureAProperties?.keySet()?.toList()
+            val featureBProperties = featureB.properties()
+            val featureBKeySetToRemove = featureBProperties?.keySet()?.toList()
+
+            featureAKeySetToRemove?.forEach { key ->
+                featureB.addBooleanProperty(key, featureAProperties[key].asBoolean)
+                featureA.removeProperty(key)
+            }
+
+            featureBKeySetToRemove?.forEach { key ->
+                featureA.addBooleanProperty(key, featureBProperties[key].asBoolean)
+                featureB.removeProperty(key)
             }
         }
     }
