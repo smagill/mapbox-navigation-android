@@ -20,7 +20,7 @@ import com.mapbox.navigation.base.trip.model.RouteStepProgress
 import com.mapbox.navigation.base.trip.notification.NotificationAction
 import com.mapbox.navigation.core.Rounding
 import com.mapbox.navigation.core.internal.MapboxDistanceFormatter
-import com.mapbox.navigation.core.internal.trip.service.MapboxTripService
+//import com.mapbox.navigation.core.internal.trip.service.MapboxTripService
 import com.mapbox.navigation.examples.R
 import com.mapbox.navigation.trip.notification.MapboxTripNotification
 import com.mapbox.navigation.ui.route.NavigationMapRoute
@@ -48,7 +48,7 @@ class TripServiceActivityKt : AppCompatActivity(), OnMapReadyCallback {
     private var mapboxMap: MapboxMap? = null
     private lateinit var mapboxTripNotification: MapboxTripNotification
     private lateinit var navigationMapRoute: NavigationMapRoute
-    private lateinit var mapboxTripService: MapboxTripService
+//    private lateinit var mapboxTripService: MapboxTripService
     private var textUpdateJob: Job = Job()
 
     @SuppressLint("MissingPermission")
@@ -58,17 +58,17 @@ class TripServiceActivityKt : AppCompatActivity(), OnMapReadyCallback {
             navigationMapRoute = NavigationMapRoute.Builder(mapView, mapboxMap, this).build()
             newOrigin()
             toggleNotification.setOnClickListener {
-                when (mapboxTripService.hasServiceStarted()) {
-                    true -> {
-                        stopService()
-                    }
-                    false -> {
-                        mapboxTripService.startService()
-                        changeText()
-                        toggleNotification.text = "Stop"
-                        monitorNotificationActionButton(MapboxTripNotification.notificationActionButtonChannel)
-                    }
-                }
+//                when (mapboxTripService.hasServiceStarted()) {
+////                    true -> {
+////                        stopService()
+////                    }
+////                    false -> {
+////                        mapboxTripService.startService()
+////                        changeText()
+////                        toggleNotification.text = "Stop"
+////                        monitorNotificationActionButton(MapboxTripNotification.notificationActionButtonChannel)
+////                    }
+////                }
             }
         }
     }
@@ -99,7 +99,7 @@ class TripServiceActivityKt : AppCompatActivity(), OnMapReadyCallback {
         )
 
         // If you want to use Mapbox provided Service do this
-        mapboxTripService = MapboxTripService(applicationContext, mapboxTripNotification, MapboxLogger)
+//        mapboxTripService = MapboxTripService(applicationContext, mapboxTripNotification, MapboxLogger)
 
         /*
         // else do this
@@ -129,7 +129,7 @@ class TripServiceActivityKt : AppCompatActivity(), OnMapReadyCallback {
 
     private fun stopService() {
         textUpdateJob.cancel()
-        mapboxTripService.stopService()
+//        mapboxTripService.stopService()
         toggleNotification.text = "Start"
     }
 
@@ -161,7 +161,7 @@ class TripServiceActivityKt : AppCompatActivity(), OnMapReadyCallback {
     override fun onDestroy() {
         super.onDestroy()
         mapView.onDestroy()
-        mapboxTripService.stopService()
+//        mapboxTripService.stopService()
         ThreadController.cancelAllNonUICoroutines()
         ThreadController.cancelAllUICoroutines()
     }
@@ -183,17 +183,17 @@ class TripServiceActivityKt : AppCompatActivity(), OnMapReadyCallback {
             while (isActive) {
                 val text = "Time elapsed: + ${SystemClock.elapsedRealtime()}"
                 notifyTextView.text = text
-                mapboxTripService.updateNotification(
-                    RouteProgress.Builder()
-                        .currentLegProgress(
-                            RouteLegProgress.Builder()
-                                .currentStepProgress(
-                                    RouteStepProgress.Builder()
-                                        .distanceRemaining(100f)
-                                        .build()
-                                ).build()
-                        ).build()
-                )
+//                mapboxTripService.updateNotification(
+//                    RouteProgress.Builder()
+//                        .currentLegProgress(
+//                            RouteLegProgress.Builder()
+//                                .currentStepProgress(
+//                                    RouteStepProgress.Builder()
+//                                        .distanceRemaining(100f)
+//                                        .build()
+//                                ).build()
+//                        ).build()
+//                )
                 Timber.i(text)
                 delay(1000L)
             }
