@@ -25,6 +25,7 @@ import com.mapbox.api.directions.v5.models.DirectionsRoute;
 import com.mapbox.geojson.Point;
 import com.mapbox.libnavigation.ui.R;
 import com.mapbox.mapboxsdk.camera.CameraPosition;
+import com.mapbox.mapboxsdk.camera.CameraUpdateFactory;
 import com.mapbox.mapboxsdk.location.modes.RenderMode;
 import com.mapbox.mapboxsdk.maps.MapView;
 import com.mapbox.mapboxsdk.maps.MapboxMap;
@@ -426,6 +427,17 @@ public class NavigationView extends CoordinatorLayout implements LifecycleOwner,
     snackbar.show();
   }
 
+  @Override
+  public void onGuidanceViewChange(int left, int top, int width, int height, boolean isLandscape) {
+    if (isLandscape) {
+//      navigationMap.retrieveMap().easeCamera(CameraUpdateFactory.paddingTo(width, 0, 0, 0), 500);
+      navigationMap.retrieveMap().setPadding(width, 0, 0, 0);
+    } else {
+//      navigationMap.retrieveMap().easeCamera(CameraUpdateFactory.paddingTo(0, height, 0, 0), 500);
+      navigationMap.retrieveMap().setPadding(0, height, 0, 0);
+    }
+  }
+
   /**
    * Should be called when this view is completely initialized.
    *
@@ -675,6 +687,10 @@ public class NavigationView extends CoordinatorLayout implements LifecycleOwner,
     initializeNavigationPresenter();
     initializeInstructionListListener();
     initializeSummaryBottomSheet();
+    instructionView.setGuidanceViewPadding(0, 0, 0,
+            getResources().getDimensionPixelSize(R.dimen.summary_bottomsheet_height)
+//                    + getResources().getDimensionPixelSize(R.dimen.summary_bottomsheet_shadow_height)
+    );
   }
 
   private void bind() {
@@ -710,6 +726,7 @@ public class NavigationView extends CoordinatorLayout implements LifecycleOwner,
 
   private void initializeInstructionListListener() {
     instructionView.setInstructionListListener(new NavigationInstructionListListener(navigationViewEventDispatcher));
+    instructionView.setGuidanceViewVisibilityListener(new NavigationGuidanceViewVisibilityListener(navigationPresenter));
   }
 
   private void initializeNavigationMap(MapView mapView, MapboxMap map) {

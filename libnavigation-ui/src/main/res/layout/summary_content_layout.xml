@@ -8,7 +8,7 @@
     <View
         android:id="@+id/sheetShadow"
         android:layout_width="wrap_content"
-        android:layout_height="6dp"
+        android:layout_height="@dimen/summary_bottomsheet_shadow_height"
         android:background="@drawable/gradient_shadow_up"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"

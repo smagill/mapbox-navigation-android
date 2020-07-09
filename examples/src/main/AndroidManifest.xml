@@ -154,8 +154,7 @@
 
         <activity
             android:name=".core.GuidanceViewActivity"
-            android:label="@string/title_guidance_view"
-            android:screenOrientation="portrait">
+            android:label="@string/title_guidance_view">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value=".UIActivity" />
@@ -305,8 +304,8 @@
         <activity
             android:name=".core.CustomRouteStylingActivity"
             android:label="@string/title_custom_route_styling_kotlin"
-            android:theme="@style/CustomRouteTheme"
-            android:screenOrientation="portrait">
+            android:screenOrientation="portrait"
+            android:theme="@style/CustomRouteTheme">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value=".CoreActivity" />
@@ -329,7 +328,8 @@
                 android:value=".UIActivity" />
         </activity>
 
-        <activity android:name=".history.HistoryFilesActivity"
+        <activity
+            android:name=".history.HistoryFilesActivity"
             android:label="@string/title_select_replay_history">
 
             <meta-data

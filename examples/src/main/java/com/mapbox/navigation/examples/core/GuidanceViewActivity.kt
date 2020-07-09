@@ -111,6 +111,7 @@ class GuidanceViewActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private val routeProgressObserver = object : RouteProgressObserver {
         override fun onRouteProgressChanged(routeProgress: RouteProgress) {
+            instructionView.setGuidanceViewPadding(50, -50, 50, 0)
             instructionView.updateDistanceWith(routeProgress)
             instructionView.determineGuidanceView(routeProgress)
         }

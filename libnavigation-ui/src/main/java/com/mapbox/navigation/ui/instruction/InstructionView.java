@@ -62,6 +62,7 @@ import com.mapbox.navigation.ui.internal.junction.RouteJunction;
 import com.mapbox.navigation.ui.internal.summary.InstructionListAdapter;
 import com.mapbox.navigation.ui.internal.utils.ViewUtils;
 import com.mapbox.navigation.ui.listeners.InstructionListListener;
+import com.squareup.picasso.Callback;
 import com.squareup.picasso.OkHttp3Downloader;
 import com.squareup.picasso.Picasso;
 
@@ -128,6 +129,9 @@ public class InstructionView extends RelativeLayout implements LifecycleObserver
   private String accessToken;
   private String guidanceImageUrl = "";
   private RouteJunction routeJunction = null;
+  private int[] guidanceViewMargin = new int[4];
+
+  private GuidanceViewVisibilityListener guidanceViewVisibilityListener;
 
   private int primaryBackgroundColor;
   private int secondaryBackgroundColor;
@@ -439,6 +443,18 @@ public class InstructionView extends RelativeLayout implements LifecycleObserver
     }
   }
 
+  public void setGuidanceViewVisibilityListener(
+          GuidanceViewVisibilityListener guidanceViewVisibilityListener) {
+    this.guidanceViewVisibilityListener = guidanceViewVisibilityListener;
+  }
+
+  public void setGuidanceViewPadding(int left, int top, int right, int bottom) {
+    guidanceViewMargin = new int[]{left, top, right, bottom};
+    MarginLayoutParams layoutParams = (MarginLayoutParams) guidanceViewImage.getLayoutParams();
+    layoutParams.setMargins(left, top, right, bottom);
+    guidanceViewImage.setLayoutParams(layoutParams);
+  }
+
   /**
    * Once this view has finished inflating, it will bind the views.
    * <p>
@@ -682,24 +698,34 @@ public class InstructionView extends RelativeLayout implements LifecycleObserver
 
   private void showGuidanceView(float currentStepDistanceTraveled, double currentStepTotalDistance) {
     int metersBeforeShowGuidanceView = 200;
-    if (currentStepTotalDistance <= metersBeforeShowGuidanceView) {
+    if (currentStepDistanceTraveled + metersBeforeShowGuidanceView >= currentStepTotalDistance
+            || currentStepTotalDistance <= metersBeforeShowGuidanceView) {
       routeJunction = new RouteJunction(appendTokenTo(), currentStepTotalDistance);
       animateShowGuidanceViewImage();
       new Picasso
-          .Builder(getContext())
-          .downloader(new OkHttp3Downloader(getClient()))
-          .build()
-          .load(routeJunction.getGuidanceImageUrl())
-          .into(guidanceViewImage);
-    } else if (currentStepDistanceTraveled + metersBeforeShowGuidanceView >= currentStepTotalDistance) {
-      routeJunction = new RouteJunction(appendTokenTo(), currentStepTotalDistance);
-      new Picasso
-          .Builder(getContext())
-          .downloader(new OkHttp3Downloader(getClient()))
-          .build()
-          .load(routeJunction.getGuidanceImageUrl())
-          .into(guidanceViewImage);
-      animateShowGuidanceViewImage();
+              .Builder(getContext())
+              .downloader(new OkHttp3Downloader(getClient()))
+              .build()
+              .load(routeJunction.getGuidanceImageUrl())
+              .into(guidanceViewImage, new Callback() {
+                @Override
+                public void onSuccess() {
+                  guidanceViewImage.addOnLayoutChangeListener(new OnLayoutChangeListener() {
+                    @Override
+                    public void onLayoutChange(View v, int left, int top, int right, int bottom, int oldLeft, int oldTop, int oldRight, int oldBottom) {
+                      guidanceViewImage.removeOnLayoutChangeListener(this);
+                      if (guidanceViewVisibilityListener != null) {
+                        guidanceViewVisibilityListener.onShownAt(left, top, guidanceViewImage.getMeasuredWidth(), guidanceViewImage.getMeasuredHeight(), ViewUtils.isLandscape(getContext()));
+                      }
+                    }
+                  });
+                }
+
+                @Override
+                public void onError(Exception e) {
+                  animateHideGuidanceViewImage();
+                }
+              });
     }
   }
 
@@ -902,6 +928,9 @@ public class InstructionView extends RelativeLayout implements LifecycleObserver
     if (guidanceViewImage.getVisibility() == VISIBLE) {
       beginGuidanceImageDelayedTransition(GUIDANCE_VIEW_HIDE_TRANSITION_SPEED, new DecelerateInterpolator());
       guidanceViewImage.setVisibility(GONE);
+      if (guidanceViewVisibilityListener != null) {
+        guidanceViewVisibilityListener.onHiden(ViewUtils.isLandscape(getContext()));
+      }
     }
   }
 
