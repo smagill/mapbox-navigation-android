@@ -1,6 +1,7 @@
 package com.mapbox.navigation.examples.core
 
 import android.annotation.SuppressLint
+import android.location.Location
 import android.os.Bundle
 import android.preference.PreferenceManager
 import android.view.View
@@ -15,6 +16,8 @@ import com.mapbox.android.core.location.LocationEngineResult
 import com.mapbox.api.directions.v5.DirectionsCriteria
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
+import com.mapbox.core.constants.Constants
+import com.mapbox.geojson.LineString
 import com.mapbox.mapboxsdk.camera.CameraUpdateFactory
 import com.mapbox.mapboxsdk.location.modes.RenderMode
 import com.mapbox.mapboxsdk.maps.MapboxMap
@@ -23,11 +26,13 @@ import com.mapbox.mapboxsdk.maps.Style
 import com.mapbox.navigation.base.internal.extensions.applyDefaultParams
 import com.mapbox.navigation.base.internal.extensions.coordinates
 import com.mapbox.navigation.base.trip.model.RouteProgress
+import com.mapbox.navigation.base.trip.model.RouteProgressState
 import com.mapbox.navigation.core.MapboxNavigation
 import com.mapbox.navigation.core.directions.session.RoutesRequestCallback
 import com.mapbox.navigation.core.replay.MapboxReplayer
 import com.mapbox.navigation.core.replay.ReplayLocationEngine
 import com.mapbox.navigation.core.replay.route.ReplayProgressObserver
+import com.mapbox.navigation.core.trip.session.LocationObserver
 import com.mapbox.navigation.core.trip.session.RouteProgressObserver
 import com.mapbox.navigation.core.trip.session.TripSessionState
 import com.mapbox.navigation.core.trip.session.TripSessionStateObserver
@@ -39,6 +44,8 @@ import com.mapbox.navigation.examples.utils.extensions.toPoint
 import com.mapbox.navigation.ui.camera.NavigationCamera
 import com.mapbox.navigation.ui.map.NavigationMapboxMap
 import com.mapbox.navigation.ui.map.NavigationMapboxMapInstanceState
+import com.mapbox.navigation.ui.puck.PuckDrawableSupplier
+import com.mapbox.turf.TurfMeasurement
 import java.lang.ref.WeakReference
 import kotlinx.android.synthetic.main.activity_basic_navigation_layout.*
 import timber.log.Timber
@@ -61,6 +68,7 @@ open class BasicNavigationActivity : AppCompatActivity(), OnMapReadyCallback {
     private var mapInstanceState: NavigationMapboxMapInstanceState? = null
     private val mapboxReplayer = MapboxReplayer()
     private var directionRoute: DirectionsRoute? = null
+    private var directionsRouteLineString: LineString? = null
 
     private val mapStyles = listOf(
         Style.MAPBOX_STREETS,
@@ -85,6 +93,19 @@ open class BasicNavigationActivity : AppCompatActivity(), OnMapReadyCallback {
         mapboxNavigation = MapboxNavigation(mapboxNavigationOptions).apply {
             registerTripSessionStateObserver(tripSessionStateObserver)
             registerRouteProgressObserver(routeProgressObserver)
+            registerLocationObserver(object : LocationObserver {
+                override fun onRawLocationChanged(rawLocation: Location) {
+
+                }
+
+                override fun onEnhancedLocationChanged(
+                    enhancedLocation: Location,
+                    keyPoints: List<Location>
+                ) {
+
+                    //Timber.e("*** ${getPercentDistanceTraveled(enhancedLocation)}")
+                }
+            })
         }
 
         initListeners()
@@ -93,7 +114,9 @@ open class BasicNavigationActivity : AppCompatActivity(), OnMapReadyCallback {
     override fun onMapReady(mapboxMap: MapboxMap) {
         mapboxMap.setStyle(Style.MAPBOX_STREETS) {
             mapboxMap.moveCamera(CameraUpdateFactory.zoomTo(15.0))
-            navigationMapboxMap = NavigationMapboxMap(mapView, mapboxMap, this, true)
+            navigationMapboxMap = NavigationMapboxMap(mapView, mapboxMap, this, null, true, true).also {
+                it.setPuckDrawableSupplier(CustomPuckDrawableSupplier())
+            }
             mapInstanceState?.let { state ->
                 navigationMapboxMap?.restoreFrom(state)
             }
@@ -157,6 +180,9 @@ open class BasicNavigationActivity : AppCompatActivity(), OnMapReadyCallback {
                 directionRoute = routes[0]
                 navigationMapboxMap?.drawRoute(routes[0])
                 startNavigation.visibility = View.VISIBLE
+
+
+                directionsRouteLineString = LineString.fromPolyline(directionRoute!!.geometry()!!, Constants.PRECISION_6)
             } else {
                 startNavigation.visibility = View.GONE
             }
@@ -321,5 +347,23 @@ open class BasicNavigationActivity : AppCompatActivity(), OnMapReadyCallback {
             updateCameraOnNavigationStateChange(true)
             mapboxNavigation?.startTripSession()
         }
+    }
+
+    private fun getOrigin() = directionsRouteLineString!!.coordinates().first()
+    private fun getDestination() = directionsRouteLineString!!.coordinates().last()
+    private fun getDistanceFromOrigin(location: Location) = TurfMeasurement.distance(getOrigin(), location.toPoint())
+    private fun getDistanceFromDestination(location: Location) = TurfMeasurement.distance(getDestination(), location.toPoint())
+    private fun getPercentDistanceTraveled(location: Location) = getDistanceFromOrigin(location) / directionRoute!!.distance()!!
+
+    class CustomPuckDrawableSupplier : PuckDrawableSupplier {
+        override fun getPuckDrawable(routeProgressState: RouteProgressState): Int =
+            when (routeProgressState) {
+                RouteProgressState.ROUTE_INVALID -> R.drawable.custom_puck_icon_uncertain_location
+                RouteProgressState.ROUTE_INITIALIZED -> R.drawable.custom_user_puck_icon
+                RouteProgressState.LOCATION_TRACKING -> R.drawable.custom_user_puck_icon
+                RouteProgressState.ROUTE_COMPLETE -> R.drawable.custom_puck_icon_uncertain_location
+                RouteProgressState.LOCATION_STALE -> R.drawable.custom_user_puck_icon
+                else -> R.drawable.custom_puck_icon_uncertain_location
+            }
     }
 }

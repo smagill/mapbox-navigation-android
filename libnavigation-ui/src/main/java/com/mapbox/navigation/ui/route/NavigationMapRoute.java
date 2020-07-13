@@ -1,5 +1,6 @@
 package com.mapbox.navigation.ui.route;
 
+import android.animation.TimeInterpolator;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.view.animation.LinearInterpolator;
@@ -22,7 +23,9 @@ import com.mapbox.navigation.base.trip.model.RouteProgress;
 import com.mapbox.navigation.core.MapboxNavigation;
 import com.mapbox.navigation.ui.internal.route.MapRouteLayerProvider;
 import com.mapbox.navigation.ui.internal.route.MapRouteSourceProvider;
+import com.mapbox.navigation.ui.internal.route.RouteConstants;
 import com.mapbox.navigation.ui.internal.utils.CompareUtils;
+import com.mapbox.navigation.ui.internal.utils.RouteLineValueAnimator;
 
 import org.jetbrains.annotations.TestOnly;
 
@@ -30,8 +33,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static com.mapbox.navigation.ui.internal.route.RouteConstants.LAYER_ABOVE_UPCOMING_MANEUVER_ARROW;
-import static com.mapbox.navigation.ui.internal.route.RouteConstants.ROUTE_LINE_VANISH_ANIMATION_DELAY;
-import static com.mapbox.navigation.ui.internal.route.RouteConstants.ROUTE_LINE_VANISH_ANIMATION_DURATION;
 
 /**
  * Provide a route using {@link NavigationMapRoute#addRoutes(List)} and a route will be drawn using
@@ -69,7 +70,7 @@ public class NavigationMapRoute implements LifecycleObserver {
   private MapRouteArrow routeArrow;
   private boolean vanishRouteLineEnabled;
   private MapRouteLineInitializedCallback routeLineInitializedCallback;
-  private ValueAnimator vanishingRouteLineAnimator;
+  private RouteLineValueAnimator vanishingRouteLineAnimator;
 
   /**
    * Construct an instance of {@link NavigationMapRoute}.
@@ -363,7 +364,7 @@ public class NavigationMapRoute implements LifecycleObserver {
 
   private void shutdownVanishingRouteLineAnimator() {
     if (this.vanishingRouteLineAnimator != null) {
-      this.vanishingRouteLineAnimator.removeAllUpdateListeners();
+      this.vanishingRouteLineAnimator.setValueAnimatorHandler(null);
       cancelVanishingRouteLineAnimator();
     }
   }
@@ -419,10 +420,8 @@ public class NavigationMapRoute implements LifecycleObserver {
   private MapRouteProgressChangeListener buildMapRouteProgressChangeListener() {
     shutdownVanishingRouteLineAnimator();
     if (vanishRouteLineEnabled) {
-      vanishingRouteLineAnimator = ValueAnimator.ofFloat();
-      vanishingRouteLineAnimator.setDuration(ROUTE_LINE_VANISH_ANIMATION_DURATION);
-      vanishingRouteLineAnimator.setInterpolator(new LinearInterpolator());
-      vanishingRouteLineAnimator.setStartDelay(ROUTE_LINE_VANISH_ANIMATION_DELAY);
+      vanishingRouteLineAnimator = new RouteLineValueAnimator();
+      vanishingRouteLineAnimator.setAnimationDelay(RouteConstants.ROUTE_LINE_VANISH_ANIMATION_DELAY);
     } else {
       vanishingRouteLineAnimator = null;
     }
